@@ -73,6 +73,8 @@ class S {
     'server_ok': {'en': 'Connected', 'ur': 'جڑا ہوا'},
     'server_down': {'en': 'Not connected', 'ur': 'جڑا نہیں'},
     'settings_title': {'en': 'Settings', 'ur': 'ترتیبات'},
+    'language_label': {'en': 'Language', 'ur': 'زبان'},
+    'btn_cancel': {'en': 'Cancel', 'ur': 'منسوخ'},
     'settings_url': {'en': 'Backend URL', 'ur': 'بیک اینڈ یو آر ایل'},
     'language': {'en': 'اردو', 'ur': 'English'},
     'nothing_selected': {'en': 'Nothing was selected.', 'ur': 'کچھ منتخب نہیں ہوا۔'},

@@ -8,8 +8,8 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import 'models/verdict.dart';
 import 'screens/checking_screen.dart';
-import 'screens/home_screen.dart';
 import 'screens/result_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/api_service.dart';
 import 'services/prefs.dart';
 import 'services/speech_service.dart';
@@ -116,7 +116,7 @@ class _NigehbanAppState extends State<NigehbanApp> {
       navigatorKey: navKey,
       debugShowCheckedModeBanner: false,
       theme: N.theme(),
-      home: const HomeScreen(),
+      home: const SplashScreen(),
     );
   }
 }

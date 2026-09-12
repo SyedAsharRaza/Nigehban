@@ -61,13 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _pasteFlow() async {
-    final controller = TextEditingController();
-    try {
-      final clip = await Clipboard.getData(Clipboard.kTextPlain);
-      final t = clip?.text?.trim() ?? '';
-      if (t.isNotEmpty && t.length < 4000) controller.text = t;
-    } catch (_) {}
-    if (!mounted) return;
+    final controller = TextEditingController(); // starts empty — the user chooses to paste
     final text = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -192,39 +186,72 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openSettings() async {
-    final c = TextEditingController(text: Prefs.baseUrl);
     bool voice = Prefs.voiceOn;
+    String lang = Prefs.lang;
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setS) => AlertDialog(
-          title: Text(S.t('settings_title')),
+          title: Text(lang == 'ur' ? S.ur('settings_title') : S.en('settings_title')),
           content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(lang == 'ur' ? S.ur('language_label') : S.en('language_label'), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: N.ink2)),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'ur', label: Text('اردو', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+                ButtonSegment(value: 'en', label: Text('English', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700))),
+              ],
+              selected: {lang},
+              onSelectionChanged: (v) => setS(() => lang = v.first),
+              style: SegmentedButton.styleFrom(selectedBackgroundColor: N.brandSoft, selectedForegroundColor: N.brandDark),
+            ),
+            const SizedBox(height: 16),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text(S.t('voice_toggle'), style: const TextStyle(fontSize: 15)),
+              secondary: const Icon(Icons.volume_up_rounded, color: N.brand),
+              title: Text(lang == 'ur' ? S.ur('voice_toggle') : S.en('voice_toggle'), style: const TextStyle(fontSize: 15)),
               value: voice,
               activeThumbColor: N.brand,
               onChanged: (v) => setS(() => voice = v),
             ),
-            const SizedBox(height: 8),
-            TextField(controller: c, decoration: InputDecoration(labelText: S.t('settings_url')), keyboardType: TextInputType.url, style: const TextStyle(fontSize: 13)),
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, children: [
-              ActionChip(label: const Text('Vercel'), onPressed: () => c.text = AppConfig.defaultBaseUrl),
-              ActionChip(label: const Text('Emulator'), onPressed: () => c.text = AppConfig.emulatorLocalUrl),
-            ]),
           ]),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(S.t('btn_save'))),
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(lang == 'ur' ? S.ur('btn_cancel') : S.en('btn_cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(lang == 'ur' ? S.ur('btn_save') : S.en('btn_save'))),
           ],
         ),
       ),
     );
     if (saved == true) {
-      await Prefs.setBaseUrl(c.text);
+      await Prefs.setLang(lang);
       await Prefs.setVoiceOn(voice);
+      if (mounted) setState(() {});
+    }
+  }
+
+  /// Hidden (long-press the logo/title): backend URL for demo-day fallback. Not part of the user-facing UI.
+  Future<void> _openDeveloper() async {
+    final c = TextEditingController(text: Prefs.baseUrl);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Developer'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          TextField(controller: c, decoration: const InputDecoration(labelText: 'Backend URL'), keyboardType: TextInputType.url, style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, children: [
+            ActionChip(label: const Text('Vercel'), onPressed: () => c.text = AppConfig.defaultBaseUrl),
+            ActionChip(label: const Text('Emulator'), onPressed: () => c.text = AppConfig.emulatorLocalUrl),
+          ]),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+    if (saved == true) {
+      await Prefs.setBaseUrl(c.text);
       _probe();
     }
   }
@@ -246,11 +273,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 delegate: SliverChildListDelegate([
                   // ---- header
                   Row(children: [
-                    Container(width: 38, height: 38, decoration: BoxDecoration(color: N.brand, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.shield_rounded, color: Colors.white, size: 22)),
+                    GestureDetector(
+                      onLongPress: _openDeveloper,
+                      child: Image.asset('assets/brand/logo_1024.png', width: 40, height: 40),
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: GestureDetector(
-                        onLongPress: _openSettings,
+                        onLongPress: _openDeveloper,
                         child: Text(S.t('app_name'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: N.brandDark)),
                       ),
                     ),
