@@ -64,6 +64,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -78,6 +79,7 @@ flutter:
 
   assets:
     - assets/lottie/
+    - assets/brand/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -109,3 +111,11 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/brand/icon_1024.png"
+  adaptive_icon_background: "#0B5D4B"
+  adaptive_icon_foreground: "assets/brand/icon_foreground_1024.png"
+  min_sdk_android: 23
