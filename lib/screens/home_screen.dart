@@ -180,11 +180,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _toast(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
-  Future<void> _toggleLang() async {
-    await Prefs.setLang(Prefs.lang == 'ur' ? 'en' : 'ur');
-    setState(() {});
-  }
-
   Future<void> _openSettings() async {
     bool voice = Prefs.voiceOn;
     String lang = Prefs.lang;
@@ -291,11 +286,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       visualDensity: VisualDensity.compact,
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-                    ),
-                    TextButton(
-                      onPressed: _toggleLang,
-                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: const Size(0, 36), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                      child: Text(S.t('language'), style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: N.brand)),
                     ),
                   ]),
                   const SizedBox(height: 18),
