@@ -15,6 +15,7 @@ class Prefs {
   static const _kGuardianName = 'guardian_name';
   static const _kBaseUrl = 'base_url';
   static const _kOnboarded = 'onboarded';
+  static const _kVoice = 'voice_on';
 
   /// 'ur' (default) or 'en'
   static String get lang => _p.getString(_kLang) ?? 'ur';
@@ -28,6 +29,10 @@ class Prefs {
 
   static String get baseUrl => (_p.getString(_kBaseUrl) ?? '').trim().isEmpty ? AppConfig.defaultBaseUrl : _p.getString(_kBaseUrl)!.trim();
   static Future<void> setBaseUrl(String v) => _p.setString(_kBaseUrl, v.trim());
+
+  /// Speak verdicts aloud (default on). Screens never talk unprompted except results and the listening prompt.
+  static bool get voiceOn => _p.getBool(_kVoice) ?? true;
+  static Future<void> setVoiceOn(bool v) => _p.setBool(_kVoice, v);
 
   static bool get onboarded => _p.getBool(_kOnboarded) ?? false;
   static Future<void> setOnboarded(bool v) => _p.setBool(_kOnboarded, v);

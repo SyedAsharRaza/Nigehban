@@ -79,8 +79,9 @@ class SpeechService {
 
   /// Speak [ur] if the user's language is Urdu AND an Urdu voice exists, else [en].
   /// Never throws; returns when speech finishes (or immediately if TTS is unavailable).
-  Future<void> say({required String en, String? ur}) async {
+  Future<void> say({required String en, String? ur, bool force = false}) async {
     if (!_ttsReady) return;
+    if (!force && !Prefs.voiceOn) return;
     final wantUr = Prefs.lang == 'ur' && (ur ?? '').trim().isNotEmpty;
     final useUr = wantUr && _urduVoice;
     final text = useUr ? ur!.trim() : en.trim();

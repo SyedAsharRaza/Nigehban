@@ -4,13 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../config.dart';
-import '../main.dart';
 import '../models/verdict.dart';
 import '../services/api_service.dart';
 import '../services/prefs.dart';
 import '../services/speech_service.dart';
 import '../strings.dart';
-import '../widgets/big_button.dart';
+import '../theme.dart';
+import '../widgets/ui.dart';
 import 'checking_screen.dart';
 import 'guardian_screen.dart';
 import 'result_screen.dart';
@@ -24,7 +24,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool? _serverOk; // null = checking
+  bool? _serverOk;
   final _speech = SpeechService.instance;
 
   @override
@@ -32,13 +32,12 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _probe();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!Prefs.onboarded) {
+      if (!Prefs.onboarded && mounted) {
         await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GuardianScreen(firstRun: true)));
         await Prefs.setOnboarded(true);
+        if (mounted) setState(() {});
       }
-      // Small delay so TTS engine is ready on cold start.
-      await Future<void>.delayed(const Duration(milliseconds: 600));
-      _speech.say(en: S.en('home_speak'), ur: S.ur('home_speak'));
+      // No unprompted speech on the home screen — the app talks when it has something to say.
     });
   }
 
@@ -48,34 +47,21 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _serverOk = ok);
   }
 
-  // ---------------------------------------------------------------- flows
+  // ------------------------------------------------------------------ flows
 
-  void _runCheck({
-    required String text,
-    Uint8List? bytes,
-    String? fileName,
-    required CheckSource source,
-    String? previewNote,
-  }) {
+  void _runCheck({required String text, Uint8List? bytes, String? fileName, required CheckSource source, String? previewNote}) {
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => CheckingScreen(
         text: text,
         previewNote: previewNote,
         run: () => ApiService.check(text: text, fileBytes: bytes, fileName: fileName, source: source),
-        onVerdict: (Verdict v) {
-          Navigator.of(context).pushReplacement(MaterialPageRoute(
-            builder: (_) => ResultScreen(verdict: v, originalText: text),
-          ));
-        },
+        onVerdict: (Verdict v) => Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => ResultScreen(verdict: v, originalText: text))),
       ),
     ));
   }
 
   Future<void> _pasteFlow() async {
-    await _speech.say(en: S.en('paste_speak'), ur: S.ur('paste_speak'));
-    if (!mounted) return;
     final controller = TextEditingController();
-    // Pre-fill from clipboard if it looks like a message.
     try {
       final clip = await Clipboard.getData(Clipboard.kTextPlain);
       final t = clip?.text?.trim() ?? '';
@@ -85,53 +71,47 @@ class _HomeScreenState extends State<HomeScreen> {
     final text = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: NColors.bg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(left: 20, right: 20, top: 20, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
+        padding: EdgeInsets.only(left: 20, right: 20, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.message_rounded, color: NColors.paste, size: 32),
-                const SizedBox(width: 10),
-                Expanded(child: Text(S.t('btn_paste'), style: Theme.of(ctx).textTheme.titleLarge)),
-                TextButton.icon(
-                  onPressed: () async {
-                    final clip = await Clipboard.getData(Clipboard.kTextPlain);
-                    controller.text = clip?.text ?? '';
-                  },
-                  icon: const Icon(Icons.content_paste_rounded),
-                  label: Text(S.t('btn_paste_clip')),
-                ),
-                IconButton(onPressed: () => controller.clear(), icon: const Icon(Icons.close_rounded), tooltip: S.t('btn_clear')),
-              ],
-            ),
-            const SizedBox(height: 12),
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: N.line, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 14),
+            Row(children: [
+              Container(width: 36, height: 36, decoration: BoxDecoration(color: N.message.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.chat_rounded, color: N.message, size: 20)),
+              const SizedBox(width: 10),
+              Expanded(child: Text(S.t('btn_paste'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+              TextButton.icon(
+                onPressed: () async {
+                  final clip = await Clipboard.getData(Clipboard.kTextPlain);
+                  controller.text = clip?.text ?? '';
+                },
+                icon: const Icon(Icons.content_paste_rounded, size: 18),
+                label: Text(S.t('btn_paste_clip')),
+              ),
+              IconButton(onPressed: controller.clear, icon: const Icon(Icons.close_rounded), tooltip: S.t('btn_clear')),
+            ]),
+            const SizedBox(height: 10),
             TextField(
               controller: controller,
               maxLines: 7,
               minLines: 4,
               autofocus: true,
-              style: const TextStyle(fontSize: 20),
+              style: const TextStyle(fontSize: 16.5, height: 1.4),
               decoration: InputDecoration(hintText: S.t('paste_hint')),
             ),
-            const SizedBox(height: 14),
-            WideButton(
-              icon: Icons.shield_rounded,
-              label: S.t('btn_check'),
-              color: NColors.brand,
-              onTap: () => Navigator.of(ctx).pop(controller.text),
-            ),
+            const SizedBox(height: 12),
+            PrimaryButton(label: S.t('btn_check'), icon: Icons.shield_rounded, onTap: () => Navigator.of(ctx).pop(controller.text)),
           ],
         ),
       ),
     );
     if (text == null) return;
     if (text.trim().isEmpty) {
-      _speech.say(en: S.en('empty_text'), ur: S.ur('empty_text'));
+      _toast(S.t('empty_text'));
       return;
     }
     _runCheck(text: text.trim(), source: CheckSource.pastedText);
@@ -139,55 +119,46 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _speakFlow() async {
     if (!_speech.sttAvailable) {
-      await _speech.say(en: S.en('speak_unavailable'), ur: S.ur('speak_unavailable'));
+      _toast(S.t('speak_unavailable'));
       return _pasteFlow();
     }
-    if (!mounted) return;
     final text = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const SpeakScreen()));
     if (text == null || text.trim().isEmpty) return;
     _runCheck(text: text.trim(), source: CheckSource.dictated);
   }
 
   Future<void> _photoFlow() async {
-    await _speech.say(en: S.en('photo_speak'), ur: S.ur('photo_speak'));
-    if (!mounted) return;
     final src = await showModalBottomSheet<ImageSource>(
       context: context,
-      backgroundColor: NColors.bg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            Expanded(child: BigButton(icon: Icons.photo_camera_rounded, label: S.t('btn_camera'), color: NColors.photo, onTap: () => Navigator.of(ctx).pop(ImageSource.camera))),
-            const SizedBox(width: 16),
-            Expanded(child: BigButton(icon: Icons.photo_library_rounded, label: S.t('btn_gallery'), color: NColors.paste, onTap: () => Navigator.of(ctx).pop(ImageSource.gallery))),
-          ],
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: N.line, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 14),
+            Row(children: [
+              Expanded(child: ActionTile(icon: Icons.photo_camera_rounded, label: S.t('btn_camera'), caption: '', color: N.photo, onTap: () => Navigator.of(ctx).pop(ImageSource.camera))),
+              const SizedBox(width: 12),
+              Expanded(child: ActionTile(icon: Icons.photo_library_rounded, label: S.t('btn_gallery'), caption: '', color: N.message, onTap: () => Navigator.of(ctx).pop(ImageSource.gallery))),
+            ]),
+          ]),
         ),
       ),
     );
     if (src == null) return;
     XFile? file;
     try {
-      file = await ImagePicker().pickImage(
-        source: src,
-        imageQuality: AppConfig.imageQuality,
-        maxWidth: AppConfig.imageMaxWidth.toDouble(),
-      );
+      file = await ImagePicker().pickImage(source: src, imageQuality: AppConfig.imageQuality, maxWidth: AppConfig.imageMaxWidth.toDouble());
     } catch (_) {
       file = null;
     }
-    if (file == null) {
-      _speech.say(en: S.en('nothing_selected'), ur: S.ur('nothing_selected'));
-      return;
-    }
+    if (file == null) return;
     final bytes = await file.readAsBytes();
-    final name = file.name.isNotEmpty ? file.name : 'photo.jpg';
-    _runCheck(text: '', bytes: bytes, fileName: name, source: CheckSource.image, previewNote: S.t('btn_photo'));
+    _runCheck(text: '', bytes: bytes, fileName: file.name.isNotEmpty ? file.name : 'photo.jpg', source: CheckSource.image, previewNote: S.t('btn_photo'));
   }
 
   Future<void> _voiceNoteFlow() async {
-    await _speech.say(en: S.en('voice_speak'), ur: S.ur('voice_speak'));
     FilePickerResult? res;
     try {
       res = await FilePicker.platform.pickFiles(
@@ -196,7 +167,6 @@ class _HomeScreenState extends State<HomeScreen> {
         withData: true,
       );
     } catch (_) {
-      // Some pickers reject custom filters; fall back to the generic audio type.
       try {
         res = await FilePicker.platform.pickFiles(type: FileType.audio, withData: true);
       } catch (_) {
@@ -210,156 +180,182 @@ class _HomeScreenState extends State<HomeScreen> {
         bytes = await XFile(f!.path!).readAsBytes();
       } catch (_) {}
     }
-    if (f == null || bytes == null || bytes.isEmpty) {
-      _speech.say(en: S.en('nothing_selected'), ur: S.ur('nothing_selected'));
-      return;
-    }
+    if (f == null || bytes == null || bytes.isEmpty) return;
     _runCheck(text: '', bytes: bytes, fileName: f.name, source: CheckSource.voiceNote, previewNote: S.t('btn_voice'));
   }
+
+  void _toast(String msg) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
   Future<void> _toggleLang() async {
     await Prefs.setLang(Prefs.lang == 'ur' ? 'en' : 'ur');
     setState(() {});
-    _speech.say(en: S.en('home_speak'), ur: S.ur('home_speak'));
   }
 
   Future<void> _openSettings() async {
     final c = TextEditingController(text: Prefs.baseUrl);
+    bool voice = Prefs.voiceOn;
     final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(S.t('settings_title')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: c, decoration: InputDecoration(labelText: S.t('settings_url')), keyboardType: TextInputType.url),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: Text(S.t('settings_title')),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(S.t('voice_toggle'), style: const TextStyle(fontSize: 15)),
+              value: voice,
+              activeThumbColor: N.brand,
+              onChanged: (v) => setS(() => voice = v),
+            ),
+            const SizedBox(height: 8),
+            TextField(controller: c, decoration: InputDecoration(labelText: S.t('settings_url')), keyboardType: TextInputType.url, style: const TextStyle(fontSize: 13)),
             const SizedBox(height: 8),
             Wrap(spacing: 8, children: [
               ActionChip(label: const Text('Vercel'), onPressed: () => c.text = AppConfig.defaultBaseUrl),
               ActionChip(label: const Text('Emulator'), onPressed: () => c.text = AppConfig.emulatorLocalUrl),
             ]),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(S.t('btn_save'))),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(S.t('btn_save'))),
-        ],
       ),
     );
     if (saved == true) {
       await Prefs.setBaseUrl(c.text);
+      await Prefs.setVoiceOn(voice);
       _probe();
     }
   }
 
-  // ---------------------------------------------------------------- UI
+  // ------------------------------------------------------------------ UI
 
   @override
   Widget build(BuildContext context) {
     final ur = Prefs.lang == 'ur';
+    final dir = ur ? TextDirection.rtl : TextDirection.ltr;
+    final hasGuardian = Prefs.guardianPhone.isNotEmpty;
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header
-              Row(
-                children: [
-                  GestureDetector(
-                    onLongPress: _openSettings,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 46,
-                          height: 46,
-                          decoration: const BoxDecoration(color: NColors.brand, shape: BoxShape.circle),
-                          child: const Icon(Icons.shield_rounded, color: Colors.white, size: 28),
-                        ),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(S.t('app_name'), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: NColors.brandDark)),
-                            Text(S.t('tagline'), style: const TextStyle(fontSize: 14, color: Colors.black54)),
-                          ],
-                        ),
-                      ],
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  // ---- header
+                  Row(children: [
+                    Container(width: 38, height: 38, decoration: BoxDecoration(color: N.brand, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.shield_rounded, color: Colors.white, size: 22)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: GestureDetector(
+                        onLongPress: _openSettings,
+                        child: Text(S.t('app_name'), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: N.brandDark)),
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  InkWell(
-                    onTap: _probe,
-                    borderRadius: BorderRadius.circular(20),
-                    child: Padding(
-                      padding: const EdgeInsets.all(6),
-                      child: Row(children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _serverOk == null ? Colors.grey : (_serverOk! ? NColors.safe : NColors.danger),
+                    IconButton(
+                      onPressed: _openSettings,
+                      icon: const Icon(Icons.tune_rounded, color: N.ink2, size: 22),
+                      tooltip: S.t('settings_title'),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+                    ),
+                    TextButton(
+                      onPressed: _toggleLang,
+                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: const Size(0, 36), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      child: Text(S.t('language'), style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: N.brand)),
+                    ),
+                  ]),
+                  const SizedBox(height: 18),
+
+                  // ---- hero
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [N.brand, N.brandDark], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                      borderRadius: BorderRadius.circular(22),
+                      boxShadow: N.shadow,
+                    ),
+                    child: Row(children: [
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(S.t('hero_title'), textDirection: dir, style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800, height: 1.2)),
+                          const SizedBox(height: 6),
+                          Text(S.t('hero_sub'), textDirection: dir, style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 13.5, height: 1.45)),
+                          const SizedBox(height: 10),
+                          InkWell(
+                            onTap: _probe,
+                            borderRadius: BorderRadius.circular(999),
+                            child: Pill(
+                              icon: Icons.circle,
+                              text: _serverOk == null ? '…' : (_serverOk! ? S.t('server_ok') : S.t('server_down')),
+                              color: _serverOk == null ? Colors.white70 : (_serverOk! ? const Color(0xFF9BE7B8) : const Color(0xFFFFB4B4)),
+                              bg: Colors.white.withValues(alpha: 0.14),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(_serverOk == null ? '…' : (_serverOk! ? S.t('server_ok') : S.t('server_down')), style: const TextStyle(fontSize: 13, color: Colors.black54)),
-                      ]),
-                    ),
+                        ]),
+                      ),
+                      const SizedBox(width: 8),
+                      const Motion('scan', size: 92, fallbackColor: Colors.white),
+                    ]),
                   ),
-                  const SizedBox(width: 4),
-                  OutlinedButton(
-                    onPressed: _toggleLang,
-                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12), minimumSize: const Size(0, 40)),
-                    child: Text(S.t('language'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 22),
+
+                  // ---- actions
+                  Text(S.t('section_check'), textDirection: dir, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: N.ink2)),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(child: ActionTile(icon: Icons.chat_rounded, label: S.t('btn_paste'), caption: S.t('cap_paste'), color: N.message, onTap: _pasteFlow)),
+                    const SizedBox(width: 12),
+                    Expanded(child: ActionTile(icon: Icons.mic_rounded, label: S.t('btn_speak'), caption: S.t('cap_speak'), color: N.speak, onTap: _speakFlow)),
+                  ]),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(child: ActionTile(icon: Icons.photo_camera_rounded, label: S.t('btn_photo'), caption: S.t('cap_photo'), color: N.photo, onTap: _photoFlow)),
+                    const SizedBox(width: 12),
+                    Expanded(child: ActionTile(icon: Icons.graphic_eq_rounded, label: S.t('btn_voice'), caption: S.t('cap_voice'), color: N.voice, onTap: _voiceNoteFlow)),
+                  ]),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    const Icon(Icons.ios_share_rounded, size: 15, color: N.ink2),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(S.t('share_tip'), textDirection: dir, style: const TextStyle(fontSize: 12.5, color: N.ink2))),
+                  ]),
+                  const SizedBox(height: 22),
+
+                  // ---- guardian
+                  InfoCard(
+                    onTap: () async {
+                      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GuardianScreen()));
+                      if (mounted) setState(() {});
+                    },
+                    child: Row(children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(color: hasGuardian ? N.safeSoft : N.brandSoft, borderRadius: BorderRadius.circular(13)),
+                        child: Icon(hasGuardian ? Icons.verified_user_rounded : Icons.person_add_alt_1_rounded, color: hasGuardian ? N.safe : N.brand),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(hasGuardian ? '${S.t('guardian_set')}: ${Prefs.guardianName.isNotEmpty ? Prefs.guardianName : Prefs.guardianPhone}' : S.t('guardian_none'),
+                              maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 2),
+                          Text(hasGuardian ? Prefs.guardianPhone : S.t('guardian_none_sub'), textDirection: dir, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12.5, color: N.ink2)),
+                        ]),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: N.ink2),
+                    ]),
                   ),
-                ],
+                  const SizedBox(height: 18),
+                  Center(child: Text(S.t('privacy'), textDirection: dir, style: const TextStyle(fontSize: 12, color: N.ink2))),
+                ]),
               ),
-              const SizedBox(height: 18),
-              // Prompt
-              Text(
-                S.t('home_speak'),
-                textAlign: TextAlign.center,
-                textDirection: ur ? TextDirection.rtl : TextDirection.ltr,
-                style: const TextStyle(fontSize: 19, color: Colors.black87, height: 1.4),
-              ),
-              const SizedBox(height: 18),
-              // 2x2 giant buttons
-              Expanded(
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: Row(children: [
-                        Expanded(child: BigButton(icon: Icons.message_rounded, label: S.t('btn_paste'), color: NColors.paste, height: 170, onTap: _pasteFlow)),
-                        const SizedBox(width: 16),
-                        Expanded(child: BigButton(icon: Icons.mic_rounded, label: S.t('btn_speak'), color: NColors.speak, height: 170, onTap: _speakFlow)),
-                      ]),
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: Row(children: [
-                        Expanded(child: BigButton(icon: Icons.photo_camera_rounded, label: S.t('btn_photo'), color: NColors.photo, height: 170, onTap: _photoFlow)),
-                        const SizedBox(width: 16),
-                        Expanded(child: BigButton(icon: Icons.graphic_eq_rounded, label: S.t('btn_voice'), color: NColors.voice, height: 170, onTap: _voiceNoteFlow)),
-                      ]),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              WideButton(
-                icon: Icons.family_restroom_rounded,
-                label: Prefs.guardianName.isNotEmpty ? '${S.t('btn_guardian')}: ${Prefs.guardianName}' : S.t('btn_guardian'),
-                color: Colors.white,
-                foreground: NColors.brandDark,
-                onTap: () async {
-                  await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GuardianScreen()));
-                  setState(() {});
-                },
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

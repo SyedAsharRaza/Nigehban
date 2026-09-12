@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../main.dart';
 import '../models/verdict.dart';
 import '../services/prefs.dart';
 import '../services/speech_service.dart';
 import '../strings.dart';
-import '../widgets/big_button.dart';
+import '../theme.dart';
+import '../widgets/ui.dart';
 import 'guardian_screen.dart';
 
-/// The whole screen IS the verdict: green / amber / red, one big icon, one big
-/// word, and the explanation spoken aloud. Everything else is secondary.
+/// Coloured header band carries the verdict (icon + one line); details live in calm cards below.
+/// The verdict is spoken once on open (if voice is on) and can be replayed.
 class ResultScreen extends StatefulWidget {
   final Verdict verdict;
   final String originalText;
@@ -26,37 +26,13 @@ class _ResultScreenState extends State<ResultScreen> {
 
   Verdict get v => widget.verdict;
 
-  Color get _color {
-    switch (v.level) {
-      case VerdictLevel.safe:
-        return NColors.safe;
-      case VerdictLevel.caution:
-        return NColors.caution;
-      case VerdictLevel.danger:
-        return NColors.danger;
-    }
-  }
-
-  IconData get _icon {
-    switch (v.level) {
-      case VerdictLevel.safe:
-        return Icons.check_circle_rounded;
-      case VerdictLevel.caution:
-        return Icons.error_rounded;
-      case VerdictLevel.danger:
-        return Icons.dangerous_rounded;
-    }
-  }
-
-  String get _title {
-    switch (v.level) {
-      case VerdictLevel.safe:
-        return S.t('verdict_safe');
-      case VerdictLevel.caution:
-        return S.t('verdict_caution');
-      case VerdictLevel.danger:
-        return S.t('verdict_danger');
-    }
+  Color get _color => switch (v.level) { VerdictLevel.safe => N.safe, VerdictLevel.caution => N.caution, VerdictLevel.danger => N.danger };
+  Color get _soft => switch (v.level) { VerdictLevel.safe => N.safeSoft, VerdictLevel.caution => N.cautionSoft, VerdictLevel.danger => N.dangerSoft };
+  String get _motion => switch (v.level) { VerdictLevel.safe => 'safe', VerdictLevel.caution => 'caution', VerdictLevel.danger => 'danger' };
+  IconData get _icon => switch (v.level) { VerdictLevel.safe => Icons.check_circle_rounded, VerdictLevel.caution => Icons.error_rounded, VerdictLevel.danger => Icons.dangerous_rounded };
+  String _titleIn(String lang) {
+    final key = switch (v.level) { VerdictLevel.safe => 'verdict_safe', VerdictLevel.caution => 'verdict_caution', VerdictLevel.danger => 'verdict_danger' };
+    return lang == 'ur' ? S.ur(key) : S.en(key);
   }
 
   @override
@@ -65,36 +41,15 @@ class _ResultScreenState extends State<ResultScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _speakAll());
   }
 
-  String _titleIn(String lang) {
-    final key = switch (v.level) {
-      VerdictLevel.safe => 'verdict_safe',
-      VerdictLevel.caution => 'verdict_caution',
-      VerdictLevel.danger => 'verdict_danger',
-    };
-    return lang == 'ur' ? S.ur(key) : S.en(key);
-  }
-
-  /// Speaks: title, explanation, (media note if suspicious), advice — in the user's language.
-  Future<void> _speakAll() async {
-    final en = <String>[
-      _titleIn('en'),
-      v.voiceExplanation,
-      if (v.authenticity != null && v.authenticity!.suspicious) v.authenticity!.note,
-      if (v.advice.isNotEmpty) v.advice,
-    ];
-    final ur = <String>[
-      _titleIn('ur'),
-      v.voiceExplanationUr.isNotEmpty ? v.voiceExplanationUr : v.voiceExplanation,
-      if (v.adviceUr.isNotEmpty) v.adviceUr else if (v.advice.isNotEmpty) v.advice,
-    ];
-    await _speech.say(en: en.join('. '), ur: ur.join('۔ '));
+  Future<void> _speakAll({bool force = false}) async {
+    final en = [_titleIn('en'), v.voiceExplanation, if (v.authenticity?.suspicious == true) v.authenticity!.note, if (v.advice.isNotEmpty) v.advice];
+    final ur = [_titleIn('ur'), v.voiceExplanationUr.isNotEmpty ? v.voiceExplanationUr : v.voiceExplanation, if (v.adviceUr.isNotEmpty) v.adviceUr else if (v.advice.isNotEmpty) v.advice];
+    await _speech.say(en: en.join('. '), ur: ur.join('۔ '), force: force);
   }
 
   Future<void> _tellGuardian() async {
     var phone = Prefs.guardianPhone;
     if (phone.isEmpty) {
-      await _speech.say(en: S.en('guardian_missing'), ur: S.ur('guardian_missing'));
-      if (!mounted) return;
       await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const GuardianScreen()));
       phone = Prefs.guardianPhone;
       if (phone.isEmpty) return;
@@ -103,27 +58,19 @@ class _ResultScreenState extends State<ResultScreen> {
     final short = snippet.length > 160 ? '${snippet.substring(0, 160)}…' : snippet;
     final reason = v.reasons.isNotEmpty ? v.reasons.join(', ') : v.voiceExplanation;
     final level = v.isDanger ? '🛑 SCAM' : '⚠️ SUSPICIOUS';
-    final msg = '$level — Nigehban alert\n\n'
-        'I received this message and Nigehban says it may be a scam:\n"$short"\n\n'
-        'Reason: $reason\n'
-        'Please call me before I do anything.\n\n'
-        '(نگہبان: یہ پیغام دھوکا لگتا ہے۔ مہربانی کر کے مجھے کال کریں۔)';
-    final intl = _toIntl(phone);
-    final uri = Uri.parse('https://wa.me/$intl?text=${Uri.encodeComponent(msg)}');
+    final msg = '$level — Nigehban alert\n\nI received this and Nigehban says it may be a scam:\n"$short"\n\nReason: $reason\nPlease call me before I do anything.\n\n(نگہبان: یہ پیغام دھوکا لگتا ہے۔ مہربانی کر کے مجھے کال کریں۔)';
+    final uri = Uri.parse('https://wa.me/${_toIntl(phone)}?text=${Uri.encodeComponent(msg)}');
     try {
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!ok) throw Exception('launch failed');
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) throw Exception('launch failed');
     } catch (_) {
-      // Fallback: plain SMS
       try {
         await launchUrl(Uri.parse('sms:$phone?body=${Uri.encodeComponent(msg)}'));
       } catch (_) {
-        _speech.say(en: S.en('no_whatsapp'), ur: S.ur('no_whatsapp'));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(S.t('no_whatsapp'))));
       }
     }
   }
 
-  /// 03001234567 -> 923001234567 ; +92… -> 92… ; anything else left as digits.
   static String _toIntl(String raw) {
     var d = raw.replaceAll(RegExp(r'[^0-9+]'), '');
     if (d.startsWith('+')) d = d.substring(1);
@@ -132,157 +79,121 @@ class _ResultScreenState extends State<ResultScreen> {
     return d;
   }
 
+  void _done() {
+    _speech.stopSpeaking();
+    Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
   @override
   Widget build(BuildContext context) {
     final lang = Prefs.lang;
-    final ur = lang == 'ur';
-    final dir = ur ? TextDirection.rtl : TextDirection.ltr;
-    final showGuardian = !v.isSafe;
+    final dir = lang == 'ur' ? TextDirection.rtl : TextDirection.ltr;
+    final radarText = v.radarCount > 1
+        ? '${S.t('radar_one')} (×${v.radarCount})'
+        : v.categoryReportsThisWeek > 1
+            ? '${v.categoryReportsThisWeek} ${S.t('radar_many')}'
+            : null;
+
     return Scaffold(
-      backgroundColor: _color,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        IconButton(
-                          onPressed: () {
-                            _speech.stopSpeaking();
-                            Navigator.of(context).popUntil((r) => r.isFirst);
-                          },
-                          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 32),
-                        ),
+      backgroundColor: N.bg,
+      body: Column(children: [
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              // ---- header band
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(color: _color, borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28))),
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 4, 16, 22),
+                    child: Column(children: [
+                      Row(children: [
+                        IconButton(onPressed: _done, icon: const Icon(Icons.arrow_back_rounded, color: Colors.white)),
                         const Spacer(),
-                        if (v.offline)
-                          _pill(Icons.wifi_off_rounded, S.t('offline_banner'))
-                        else
-                          _pill(Icons.verified_rounded, '${v.confidence}%'),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Icon(_icon, size: 150, color: Colors.white),
-                    const SizedBox(height: 8),
-                    Text(_title, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900, height: 1.1)),
-                    const SizedBox(height: 14),
-                    Text(
-                      v.explanationFor(lang),
-                      textAlign: TextAlign.center,
-                      textDirection: dir,
-                      style: const TextStyle(color: Colors.white, fontSize: 24, height: 1.45, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 18),
-                    if (v.radarCount > 1 || v.categoryReportsThisWeek > 1)
-                      _card(
-                        icon: Icons.radar_rounded,
-                        title: v.radarCount > 1 ? S.t('radar_one') : '${v.categoryReportsThisWeek} ${S.t('radar_many')}',
-                        body: v.radarCount > 1 ? '×${v.radarCount}' : null,
-                        dir: dir,
-                      ),
-                    if (v.reasons.isNotEmpty)
-                      _card(icon: Icons.help_outline_rounded, title: S.t('reasons'), body: v.reasons.map((r) => '• $r').join('\n'), dir: TextDirection.ltr),
-                    if (v.adviceFor(lang).isNotEmpty) _card(icon: Icons.directions_walk_rounded, title: S.t('advice'), body: v.adviceFor(lang), dir: dir),
-                    if (v.authenticity != null && v.authenticity!.checked)
-                      _card(
-                        icon: v.authenticity!.kind == 'audio' ? Icons.graphic_eq_rounded : Icons.image_search_rounded,
-                        title: S.t('media_note'),
-                        body: '${v.authenticity!.note}${v.authenticity!.suspicious ? '  (${v.authenticity!.confidence}%)' : ''}',
-                        dir: TextDirection.ltr,
-                      ),
-                    if (v.lessonFor(lang).isNotEmpty) _card(icon: Icons.lightbulb_rounded, title: S.t('lesson'), body: v.lessonFor(lang), dir: dir),
-                    if (v.extractedText.isNotEmpty)
-                      InkWell(
-                        onTap: () => setState(() => _showRead = !_showRead),
-                        child: _card(
-                          icon: _showRead ? Icons.expand_less_rounded : Icons.expand_more_rounded,
-                          title: S.t('i_read'),
-                          body: _showRead ? v.extractedText : (v.extractedText.length > 80 ? '${v.extractedText.substring(0, 80)}…' : v.extractedText),
-                          dir: TextDirection.ltr,
+                        Flexible(
+                          child: v.offline
+                              ? Pill(icon: Icons.wifi_off_rounded, text: S.t('offline_banner'), color: Colors.white, bg: Colors.white.withValues(alpha: 0.2))
+                              : Pill(icon: Icons.verified_rounded, text: '${v.confidence}% ${S.t('confidence')}', color: Colors.white, bg: Colors.white.withValues(alpha: 0.2)),
                         ),
+                      ]),
+                      Motion(_motion, size: 110, repeat: false, fallback: _icon, fallbackColor: Colors.white),
+                      const SizedBox(height: 4),
+                      Text(_titleIn(lang), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900, height: 1.1)),
+                      const SizedBox(height: 10),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text(v.explanationFor(lang), textAlign: TextAlign.center, textDirection: dir, style: TextStyle(color: Colors.white.withValues(alpha: 0.95), fontSize: 17, height: 1.45, fontWeight: FontWeight.w600)),
                       ),
-                  ],
+                    ]),
+                  ),
                 ),
               ),
-            ),
-            // Action bar
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.12)),
-              child: Column(
-                children: [
-                  if (showGuardian) ...[
-                    WideButton(icon: Icons.family_restroom_rounded, label: S.t('btn_tell_guardian'), color: Colors.white, foreground: _color, onTap: _tellGuardian),
-                    const SizedBox(height: 10),
-                  ],
-                  Row(
-                    children: [
-                      Expanded(
-                        child: WideButton(icon: Icons.volume_up_rounded, label: S.t('btn_replay'), color: Colors.white.withValues(alpha: 0.22), onTap: _speakAll),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: WideButton(
-                          icon: Icons.home_rounded,
-                          label: S.t('btn_done'),
-                          color: Colors.white.withValues(alpha: 0.22),
-                          onTap: () {
-                            _speech.stopSpeaking();
-                            Navigator.of(context).popUntil((r) => r.isFirst);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _pill(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, color: Colors.white, size: 18),
-        const SizedBox(width: 6),
-        Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-      ]),
-    );
-  }
-
-  Widget _card({required IconData icon, required String title, String? body, required TextDirection dir}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(18)),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: Colors.white, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-                if (body != null && body.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(body, textDirection: dir, style: const TextStyle(color: Colors.white, fontSize: 18, height: 1.4)),
-                ],
+              // ---- details
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              if (radarText != null) ...[
+                InfoCard(tint: _soft, child: Row(children: [Icon(Icons.radar_rounded, color: _color), const SizedBox(width: 10), Expanded(child: Text(radarText, textDirection: dir, style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)))])),
+                const SizedBox(height: 10),
               ],
-            ),
+              if (v.reasons.isNotEmpty) ...[
+                InfoCard(
+                  title: S.t('reasons'),
+                  icon: Icons.help_outline_rounded,
+                  child: Wrap(spacing: 8, runSpacing: 8, children: v.reasons.map((r) => Pill(text: r, color: _color, bg: _soft)).toList()),
+                ),
+                const SizedBox(height: 10),
+              ],
+              if (v.adviceFor(lang).isNotEmpty) ...[
+                InfoCard(title: S.t('advice'), icon: Icons.directions_walk_rounded, child: Text(v.adviceFor(lang), textDirection: dir, style: const TextStyle(fontSize: 16, height: 1.5, fontWeight: FontWeight.w600))),
+                const SizedBox(height: 10),
+              ],
+              if (v.authenticity?.checked == true) ...[
+                InfoCard(
+                  title: S.t('media_note'),
+                  icon: v.authenticity!.kind == 'audio' ? Icons.graphic_eq_rounded : Icons.image_search_rounded,
+                  tint: v.authenticity!.suspicious ? N.cautionSoft : null,
+                  child: Text('${v.authenticity!.note}${v.authenticity!.suspicious ? '  (${v.authenticity!.confidence}%)' : ''}', style: const TextStyle(fontSize: 14.5, height: 1.45)),
+                ),
+                const SizedBox(height: 10),
+              ],
+              if (v.lessonFor(lang).isNotEmpty) ...[
+                InfoCard(title: S.t('lesson'), icon: Icons.lightbulb_rounded, tint: N.brandSoft, child: Text(v.lessonFor(lang), textDirection: dir, style: const TextStyle(fontSize: 15, height: 1.5, fontWeight: FontWeight.w600, color: N.brandDark))),
+                const SizedBox(height: 10),
+              ],
+              if (v.extractedText.isNotEmpty)
+                InfoCard(
+                  title: S.t('i_read'),
+                  icon: _showRead ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                  onTap: () => setState(() => _showRead = !_showRead),
+                  child: Text(v.extractedText, maxLines: _showRead ? null : 2, overflow: _showRead ? null : TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, height: 1.45, color: N.ink2)),
+                ),
+                ]),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+
+        // ---- actions
+        Container(
+          padding: EdgeInsets.fromLTRB(16, 10, 16, 12 + MediaQuery.of(context).padding.bottom),
+          decoration: const BoxDecoration(color: N.surface, border: Border(top: BorderSide(color: N.line))),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (!v.isSafe) ...[
+              PrimaryButton(label: S.t('btn_tell_guardian'), icon: Icons.family_restroom_rounded, color: _color, onTap: _tellGuardian),
+              const SizedBox(height: 8),
+            ],
+            Row(children: [
+              Expanded(child: PrimaryButton(label: S.t('btn_replay'), icon: Icons.volume_up_rounded, color: N.brand, outlined: true, onTap: () => _speakAll(force: true))),
+              const SizedBox(width: 8),
+              Expanded(child: PrimaryButton(label: S.t('btn_done'), icon: Icons.home_rounded, color: N.brand, outlined: v.isSafe ? false : true, onTap: _done)),
+            ]),
+          ]),
+        ),
+      ]),
     );
   }
 }

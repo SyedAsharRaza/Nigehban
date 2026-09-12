@@ -48,6 +48,12 @@ dependencies:
   url_launcher: ^6.3.0
   shared_preferences: ^2.3.0
 
+  # Share-to-Nigehban from WhatsApp / any app (text, image, audio, video)
+  receive_sharing_intent: ^1.8.0
+
+  # Motion
+  lottie: ^3.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -69,6 +75,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/lottie/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

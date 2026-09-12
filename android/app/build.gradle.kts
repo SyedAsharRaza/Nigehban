@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.example.social_nova_app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.1.12297006" // pinned to an installed NDK; avoids a 700 MB download on first build
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
